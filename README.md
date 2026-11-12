@@ -4,10 +4,10 @@ Compact alignment and distribution tools for Adobe After Effects on Windows.
 
 ## Install
 
-1. Download **Align-Studio-v1.zip** from the latest stable release.
+1. Download **Align-Studio-1.0.1.zip** from the latest stable release.
 2. Extract the complete ZIP into a folder.
 3. Save your project and close After Effects.
-4. Run **InstallAlignStudio.exe** and choose **Install Align Studio 1.0**.
+4. Run **InstallAlignStudio.exe** and choose **Install Align Studio 1.0.1**.
 5. Open After Effects → Window → Extensions → Align Studio.
 
 The installer works for your Windows account. No administrator prompt or developer-mode change is required. Keep the full extracted package together until installation completes.
@@ -27,3 +27,5 @@ Supported release target: Windows, After Effects 2026. This package is signed as
 Validation includes offline engine, launcher, updater, installation/recovery and signature checks. Live responsiveness varies with the composition; offline measurement-call reductions are not an AE timing benchmark.
 
 Font Awesome 4.7 is bundled under the SIL Open Font License; its full notice is included in the package.
+
+1.0.1 fixes the initial installer path check. The real installation command is covered by regression tests.
