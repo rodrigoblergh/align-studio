@@ -1,0 +1,12 @@
+.DS_Store
+.build/
+.swiftpm/
+artifacts/
+build/
+*.app/
+*.zip
+*.zxp
+*.p12
+*.pfx
+*.key
+*private-key*

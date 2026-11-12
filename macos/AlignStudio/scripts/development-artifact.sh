@@ -1,6 +1,8 @@
 #!/bin/bash
 set -euo pipefail
-[[ "$(uname -s)" == Darwin && "$(uname -m)" == arm64 ]] || { echo 'Apple Silicon macOS is required.' >&2; exit 1; }
+[[ "$(uname -s)" == Darwin ]] || { echo 'macOS is required.' >&2; exit 1; }
+ARCH="$(uname -m)"
+[[ "$ARCH" == arm64 || "$ARCH" == x86_64 ]] || { echo 'Unsupported development architecture.' >&2; exit 1; }
 [[ $# -eq 1 ]] || { echo 'Usage: development-artifact.sh output-directory' >&2; exit 1; }
 HERE="$(cd "$(dirname "$0")" && pwd -P)"
 KIT="$HERE/../../UpdateKit"
@@ -32,23 +34,24 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 </dict></plist>
 PLIST
 plutil -lint "$APP/Contents/Info.plist"
-lipo -verify_arch arm64 "$APP/Contents/MacOS/AlignStudioUpdater"
+lipo -verify_arch "$ARCH" "$APP/Contents/MacOS/AlignStudioUpdater"
 # Ad-hoc identity is sufficient for build validation, never a distribution claim.
 codesign --force --sign - "$APP"
 codesign --verify --strict --deep "$APP"
 cat > "$STAGE/DEVELOPMENT-ONLY.txt" <<'NOTICE'
 DEVELOPMENT ARTIFACT — NOT A STABLE RELEASE OR INSTALLER
 
-The native updater was compiled and its offline tests executed on Apple Silicon.
-Its current UI checks signed manifests only; downloading/installing updates is
-not enabled in this initial development build. Separate macOS feeds may not exist.
+The native updater was compiled and its offline tests executed on the architecture
+named in this artifact. Settings/download/install/rollback implementation is present
+but live update and AE acceptance remain unverified. Mac feeds may not exist yet.
 
 The app is ad-hoc signed, not Developer ID signed or notarized. The CEP panel is
 not Adobe-signed in this artifact. Do not replace a working installation with it.
 No installer is included and no CEP security setting is changed. Live AE behavior,
 proper release signing, updater installation and rollback still require validation.
 NOTICE
-ZIP="$OUT/Align-Studio-macOS-arm64-DEVELOPMENT.zip"
+printf '\nActual compiled architecture: %s\n' "$ARCH" >> "$STAGE/DEVELOPMENT-ONLY.txt"
+ZIP="$OUT/Align-Studio-macOS-$ARCH-DEVELOPMENT.zip"
 [[ ! -e "$ZIP" ]] || { echo 'Refusing to overwrite existing artifact.' >&2; exit 1; }
 ditto -c -k --norsrc "$STAGE" "$ZIP"
 shasum -a 256 "$ZIP"

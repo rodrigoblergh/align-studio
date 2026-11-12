@@ -1,48 +1,58 @@
 import AppKit
 import UpdateKitCore
-
-final class UpdaterDelegate: NSObject, NSApplicationDelegate {
-    var window: NSWindow?
-    var status: NSTextField?
-    var config: Configuration?
-    let args = CommandLine.arguments
-    func value(_ name: String) -> String? { guard let i = args.firstIndex(of:name), i+1 < args.count else { return nil }; return args[i+1] }
-    func applicationDidFinishLaunching(_ notification: Notification) {
-        let configURL = Bundle.main.resourceURL?.appendingPathComponent("update-config.json")
-        if let configURL { config = try? JSONDecoder().decode(Configuration.self, from: Data(contentsOf:configURL)) }
-        if args.contains("--startup") { Task { await check(silent:true); NSApp.terminate(nil) }; return }
-        NSApp.setActivationPolicy(.regular)
-        let window = NSWindow(contentRect:NSRect(x:0,y:0,width:460,height:270), styleMask:[.titled,.closable,.miniaturizable], backing:.buffered, defer:false)
-        window.title = config?.product == "effect-studio" ? "Effect Studio Updates" : "Align Studio Updates"
-        window.backgroundColor = NSColor(calibratedWhite:31/255,alpha:1)
-        let status = NSTextField(wrappingLabelWithString:"Check for signed Apple Silicon updates. Installation requires After Effects to be closed.")
-        status.textColor = NSColor(calibratedWhite:218/255,alpha:1); status.frame = NSRect(x:22,y:125,width:416,height:105)
-        let check = NSButton(title:"Check for updates",target:self,action:#selector(checkNow)); check.frame = NSRect(x:22,y:65,width:190,height:34)
-        window.contentView?.addSubview(status); window.contentView?.addSubview(check)
-        self.window = window; self.status = status; window.center(); window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps:true)
-    }
-    @objc func checkNow() { Task { await check(silent:false) } }
-    @MainActor func check(silent: Bool) async {
-        // Startup is opt-in and always remains an accessory process with no windows.
-        let defaults = UserDefaults(suiteName:"com.studio.updater.\(config?.product ?? "unconfigured").v1.macos")!
-        if silent && !defaults.bool(forKey:"startupChecks") { return }
-        if silent, let last = defaults.object(forKey:"lastCheck") as? Date, Date().timeIntervalSince(last) < 86400 { return }
+@MainActor final class UpdaterDelegate:NSObject,NSApplicationDelegate {
+    var window:NSWindow?; var status:NSTextField?; var service:UpdateService?
+    var operation:Task<Void,Never>?; var startupBox:NSButton?; var downloadBox:NSButton?; var channel:NSPopUpButton?
+    let args=CommandLine.arguments
+    func value(_ name:String)->String? { guard let i=args.firstIndex(of:name), i+1<args.count else { return nil }; return args[i+1] }
+    func applicationDidFinishLaunching(_ notification:Notification) {
         do {
-            guard let config, let raw = value("--ae-version"), let major = Int(raw.split(separator:".")[0]), let feed = URL(string:config.stableManifestUrl) else { throw UpdateError.invalid("Updater is not configured. Open it from the Studio panel.") }
-            let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-            defer { try? FileManager.default.removeItem(at:file) }
-            _ = try await Download(config:config,limit:262144,output:file).fetch(feed)
-            let bytes = try Data(contentsOf:file)
-            let manifest = try Verification.verify(bytes,config:config,channel:"stable",aeMajor:major,highest:defaults.string(forKey:"highest.stable"))
-            let current = try ReleaseVersion(value("--current-version") ?? "1.0.1")
-            let available = try ReleaseVersion(manifest.version) > current
-            defaults.set(manifest.version,forKey:"highest.stable"); defaults.set(bytes,forKey:"availableEnvelope"); defaults.set(Date(),forKey:"lastCheck")
-            let message = available ? "Version \(manifest.version) is available. Download and installation are not enabled in this development build." : "You are up to date."
-            defaults.set(message,forKey:"lastStatus"); if !silent { status?.stringValue = message }
-        } catch { if !silent { status?.stringValue = error.localizedDescription } }
+            guard let configURL=Bundle.main.resourceURL?.appendingPathComponent("update-config.json"), let raw=value("--ae-version"), let first=raw.split(separator:".").first, let major=Int(first) else { throw UpdateError.invalid("Open Updates from the Studio panel so the After Effects version is known.") }
+            let config=try JSONDecoder().decode(Configuration.self,from:Data(contentsOf:configURL))
+            let root=value("--extension-path").map{ URL(fileURLWithPath:$0,isDirectory:true) }
+            let installed=root.flatMap{ try? String(contentsOf:$0.appendingPathComponent("VERSION.txt"),encoding:.utf8).trimmingCharacters(in:.whitespacesAndNewlines) }
+            service=try UpdateService(config:config,aeMajor:major,currentVersion:installed ?? value("--current-version") ?? "1.0.1")
+        } catch { if args.contains("--startup") { NSApp.terminate(nil); return }; showWindow(message:error.localizedDescription); return }
+        if args.contains("--startup") { operation=Task { do { _ = try await service!.check(startup:true) } catch {}; NSApp.terminate(nil) }; return }
+        showWindow(message:(try? service?.store.load().lastStatus) ?? "Check for signed Apple Silicon updates.")
     }
-    func applicationShouldTerminateAfterLastWindowClosed(_ sender:NSApplication) -> Bool { true }
+    func showWindow(message:String) {
+        NSApp.setActivationPolicy(.regular)
+        let window=NSWindow(contentRect:NSRect(x:0,y:0,width:480,height:340),styleMask:[.titled,.closable,.miniaturizable],backing:.buffered,defer:false)
+        window.title=service?.config.product=="effect-studio" ? "Effect Studio Updates" : "Align Studio Updates"
+        window.appearance=NSAppearance(named:.darkAqua); window.backgroundColor=NSColor(calibratedWhite:31/255,alpha:1)
+        let status=NSTextField(wrappingLabelWithString:message.isEmpty ? "Check for signed Apple Silicon updates." : message)
+        status.textColor=NSColor(calibratedWhite:218/255,alpha:1); status.frame=NSRect(x:22,y:205,width:436,height:100); window.contentView?.addSubview(status)
+        let startup=NSButton(checkboxWithTitle:"Check when the Studio panel opens",target:self,action:#selector(saveOptions)); startup.frame=NSRect(x:22,y:167,width:436,height:24)
+        let download=NSButton(checkboxWithTitle:"Download updates automatically (never install)",target:self,action:#selector(saveOptions)); download.frame=NSRect(x:22,y:137,width:436,height:24)
+        let channel=NSPopUpButton(frame:NSRect(x:22,y:100,width:145,height:26)); channel.addItems(withTitles:["Stable","Beta"]); channel.target=self; channel.action=#selector(saveOptions)
+        if let prefs=try? service?.store.load() { startup.state=prefs.startupChecks ? .on:.off; download.state=prefs.autoDownload ? .on:.off; channel.selectItem(at:prefs.channel=="beta" ? 1:0) }
+        for control in [startup,download,channel] as [NSView] { window.contentView?.addSubview(control) }
+        let actions:[(String,Selector)]=[("Check",#selector(checkNow)),("Download",#selector(downloadNow)),("Install",#selector(installNow)),("Restore",#selector(restoreNow))]
+        for (i,action) in actions.enumerated() { let button=NSButton(title:action.0,target:self,action:action.1); button.frame=NSRect(x:CGFloat(22+i*110),y:40,width:103,height:30); window.contentView?.addSubview(button) }
+        self.window=window; self.status=status; startupBox=startup; downloadBox=download; self.channel=channel
+        window.center(); window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps:true)
+    }
+    @objc func saveOptions() {
+        do { try service?.store.modify { prefs in
+            prefs.startupChecks=startupBox?.state == .on; prefs.autoDownload=downloadBox?.state == .on
+            let selected=channel?.indexOfSelectedItem==1 ? "beta":"stable"
+            if selected != prefs.channel { prefs.channel=selected; prefs.available=nil; prefs.pending=nil; prefs.lastStatus="Channel changed. Check for updates." }
+        } } catch { status?.stringValue=error.localizedDescription }
+    }
+    func run(_ body:@escaping @Sendable (UpdateService) async throws -> String) {
+        guard operation==nil, let service else { return }; status?.stringValue="Working…"
+        operation=Task { do { let message=try await body(service); status?.stringValue=message } catch { status?.stringValue=error.localizedDescription }; operation=nil }
+    }
+    @objc func checkNow() { run { try await $0.check(startup:false) } }
+    @objc func downloadNow() { run { try await $0.download() } }
+    @objc func installNow() { run { service in try await Task.detached { try service.install() }.value } }
+    @objc func restoreNow() { run { service in
+        guard service.config.product=="align-studio" else { throw UpdateError.invalid("Effect Studio installation is not enabled in this build") }
+        return try await Task.detached { try Installation.rollback(); return "Previous version restored. Reopen After Effects." }.value
+    } }
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender:NSApplication)->Bool { operation?.cancel(); return true }
 }
-let app = NSApplication.shared
+let app=NSApplication.shared
 app.setActivationPolicy(.accessory)
-let delegate = UpdaterDelegate(); app.delegate = delegate; app.run()
+let delegate=UpdaterDelegate(); app.delegate=delegate; app.run()

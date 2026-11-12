@@ -55,6 +55,11 @@ private final class PublicXML: NSObject, XMLParserDelegate {
     func parser(_ parser: XMLParser, didEndElement elementName: String, namespaceURI: String?, qualifiedName qName: String?) { element = "RSAKeyValue" }
 }
 public enum Verification {
+    public static func date(_ value:String)->Date? {
+        let parser=ISO8601DateFormatter(); parser.formatOptions=[.withInternetDateTime,.withFractionalSeconds]
+        if let result=parser.date(from:value) { return result }
+        parser.formatOptions=[.withInternetDateTime]; return parser.date(from:value)
+    }
     private static func der(_ tag: UInt8, _ bytes: Data) -> Data {
         var size = bytes.count; var length: [UInt8] = []
         if size < 128 { length = [UInt8(size)] } else { while size > 0 { length.insert(UInt8(size & 255), at: 0); size >>= 8 }; length.insert(0x80 | UInt8(length.count), at: 0) }
@@ -81,8 +86,7 @@ public enum Verification {
         guard ["align-studio", "effect-studio"].contains(config.product), m.product == config.product, m.releaseLine == "v1", m.platform == "macos-arm64", m.channel == channel, ["stable", "beta"].contains(channel) else { throw UpdateError.invalid("Wrong product, platform or channel") }
         let version = try ReleaseVersion(m.version)
         if let highest, version < (try ReleaseVersion(highest)) { throw UpdateError.invalid("Older feed rejected") }
-        let dates = ISO8601DateFormatter()
-        guard let issued = dates.date(from: m.issuedUtc), let expires = dates.date(from: m.expiresUtc), issued <= now.addingTimeInterval(300), expires > now, expires > issued, expires.timeIntervalSince(issued) <= 90 * 86400 else { throw UpdateError.invalid("Release signature expired or has invalid dates") }
+        guard let issued = date(m.issuedUtc), let expires = date(m.expiresUtc), issued <= now.addingTimeInterval(300), expires > now, expires > issued, expires.timeIntervalSince(issued) <= 90 * 86400 else { throw UpdateError.invalid("Release signature expired or has invalid dates") }
         guard m.minAeMajor <= aeMajor, aeMajor <= m.maxAeMajor, m.minAeMajor > 0, m.packageBytes > 0, m.packageBytes <= 200 * 1024 * 1024, m.packageSha256.count == 64, m.packageSha256.allSatisfy({ $0.isHexDigit && $0.isASCII }), let url = URL(string: m.packageUrl), Route.allowed(url, config: config, asset: false) else { throw UpdateError.invalid("Incompatible or invalid release") }
         return m
     }

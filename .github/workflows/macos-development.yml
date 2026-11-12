@@ -1,4 +1,4 @@
-name: macOS Apple Silicon development
+name: macOS native development
 
 on:
   push:
@@ -14,16 +14,25 @@ concurrency:
 
 jobs:
   compile-and-test:
-    runs-on: macos-15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            architecture: arm64
+          - runner: macos-15-intel
+            architecture: x86_64
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           persist-credentials: false
-      - name: Verify Apple Silicon environment
+      - name: Verify native environment
         run: |
           set -euo pipefail
-          test "$(uname -m)" = arm64
+          uname -m
+          test "$(uname -m)" = '${{ matrix.architecture }}'
           sw_vers
           swift --version
           node --version
@@ -48,7 +57,7 @@ jobs:
       - name: Upload development artifact (not a signed release)
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: Align-Studio-macOS-arm64-development-${{ github.sha }}
+          name: Align-Studio-macOS-${{ matrix.architecture }}-development-${{ github.sha }}
           path: artifacts/*.zip
           if-no-files-found: error
           retention-days: 14
