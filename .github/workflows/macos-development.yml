@@ -1,0 +1,54 @@
+name: macOS Apple Silicon development
+
+on:
+  push:
+    branches: [macos-support]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-development-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compile-and-test:
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Verify Apple Silicon environment
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = arm64
+          sw_vers
+          swift --version
+          node --version
+      - name: Check panel paths, arguments and portable engine identity
+        run: |
+          set -euo pipefail
+          node macos/AlignStudio/tests/launcher-tests.cjs
+          node macos/AlignStudio/tests/panel-regressions.cjs
+          node --check macos/AlignStudio/panel/platform.js
+          node --check macos/AlignStudio/panel/update.js
+          node --check macos/AlignStudio/panel/panel.js
+          bash -n macos/AlignStudio/scripts/package.sh
+          bash -n "macos/AlignStudio/scripts/Install Align Studio.command"
+      - name: Compile and test native updater
+        working-directory: macos/UpdateKit
+        run: |
+          set -euo pipefail
+          swift build --configuration release --product StudioUpdater
+          swift test
+      - name: Assemble development artifact
+        run: bash macos/AlignStudio/scripts/development-artifact.sh artifacts
+      - name: Upload development artifact (not a signed release)
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: Align-Studio-macOS-arm64-development-${{ github.sha }}
+          path: artifacts/*.zip
+          if-no-files-found: error
+          retention-days: 14

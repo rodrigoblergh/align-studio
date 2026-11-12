@@ -1,0 +1,7 @@
+{
+  "product": "align-studio",
+  "stableManifestUrl": "https://github.com/rodrigoblergh/align-studio/releases/download/update-v1-macos-stable/stable.json",
+  "betaManifestUrl": "https://github.com/rodrigoblergh/align-studio/releases/download/update-v1-macos-beta/beta.json",
+  "pinnedPublicKeyXml": "<RSAKeyValue><Modulus>u/fkbUJf3ZKMR4V1SCv3374L7lXJgoX7HHGyEyQX1krvgnpF4ff5oXkGmoPwlJuw1h8e3kjdY81nRDfhfIZ5LSoFJwfyaDzKKNR+jEdYdS0H/fTuX5zzdSqCXbe1VC8zGolu969beQl5hqxgxWz4F77BzHmq4WnzCSLg6KKFaFj5271UCv3c9n1kNF5FkruDc/gWCvAVWmz+8L1ZvoHU4kpoglDD7RsYwC+0kQ9eFFxZpnowNmnvWuV7X7QxEvagr9bJJnOhFGmITETbKiPsZ950Bs+eQWeNbOuSagQ7kQFUXAUvWk9VTejR9znh/3zDaP6F68pmsJIgyPo7GEFbWz7VPEbND6yzT2NHOOqt0Vstz9TcYj36esyUSclrfn4hi5fFqGsWhZkzNcT0MYUIZ8cLH3oiakN+lYGafZzy80vteN09Nur0vkP4X3d7GbHh9B8wVKcsLu+GHQrhj3ccLqRuaXimhfg07keWbFhB4w2ekDYt1r+SefzlLodBVqpDsZaS5NkvQKHo6qDtxmfMMqDJJyAPbdiHEhtOF4/fVgGYDTQiLJK1VruY6j/CTt0tUy0/kPhmqyVXb4pKmRTp1JfOOZT6KmSETMbfVaYiZBK4rvt16W83icry1h2KEIR77hdy1Dq47VRBJ4ygdVfX6D/W0/zpzuvrFA1mbyVPLTU=</Modulus><Exponent>AQAB</Exponent></RSAKeyValue>",
+  "developerTeamID": ""
+}
