@@ -1,4 +1,5 @@
 import XCTest
+import Darwin
 import Security
 @testable import UpdateKitCore
 final class CoreTests: XCTestCase {
@@ -17,8 +18,16 @@ final class CoreTests: XCTestCase {
         XCTAssertNotNil(Verification.date("2026-11-12T17:15:13Z"))
         XCTAssertNil(Verification.date("yesterday"))
     }
+    // Use a physical temporary root so only intentionally created links affect the tests.
+    private func transactionFixtureBase() throws -> URL {
+        let path=try XCTUnwrap(realpath(FileManager.default.temporaryDirectory.path,nil))
+        defer { free(path) }
+        let root=URL(fileURLWithPath:String(cString:path),isDirectory:true)
+        try Installation.noLinks(root)
+        return root.appendingPathComponent(UUID().uuidString,isDirectory:true)
+    }
     func testTransactionRollbackAndTamper() throws {
-        let base=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let base=try transactionFixtureBase()
         defer { try? FileManager.default.removeItem(at:base) }
         let target=base.appendingPathComponent("target"), stage=base.appendingPathComponent("stage"), state=base.appendingPathComponent("state")
         for dir in [target,stage,state] { try FileManager.default.createDirectory(at:dir,withIntermediateDirectories:true) }
@@ -34,7 +43,7 @@ final class CoreTests: XCTestCase {
         XCTAssertEqual(try String(contentsOf:target.appendingPathComponent("file")),"old")
     }
     func testDanglingLinkRejected() throws {
-        let base=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let base=try transactionFixtureBase()
         try FileManager.default.createDirectory(at:base,withIntermediateDirectories:true)
         defer { try? FileManager.default.removeItem(at:base) }
         let link=base.appendingPathComponent("link")
@@ -42,7 +51,7 @@ final class CoreTests: XCTestCase {
         XCTAssertThrowsError(try Installation.noLinks(link))
     }
     func testInterruptedRenameRestoresVerifiedBackup() throws {
-        let base=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let base=try transactionFixtureBase()
         let state=base.appendingPathComponent("state"), target=base.appendingPathComponent("target"), backup=base.appendingPathComponent(".align-backup-"+UUID().uuidString)
         for dir in [state,backup] { try FileManager.default.createDirectory(at:dir,withIntermediateDirectories:true) }
         defer { try? FileManager.default.removeItem(at:base) }
