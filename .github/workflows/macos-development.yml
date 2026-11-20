@@ -18,7 +18,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - runner: macos-15
+          - runner: xcode-27
             architecture: arm64
           - runner: macos-15-intel
             architecture: x86_64
@@ -29,6 +29,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Verify native environment
+        id: verify_environment
         run: |
           set -euo pipefail
           uname -m
@@ -36,22 +37,28 @@ jobs:
           sw_vers
           swift --version
           node --version
-      - name: Check panel paths, arguments and portable engine identity
+      - name: Verify launcher and bundled engine identity
+        run: node macos/AlignStudio/tests/launcher-tests.cjs
+      - name: Check panel regressions
+        if: ${{ !cancelled() && steps.verify_environment.outcome == 'success' }}
+        run: node macos/AlignStudio/tests/panel-regressions.cjs
+      - name: Check JavaScript and shell syntax
+        if: ${{ !cancelled() && steps.verify_environment.outcome == 'success' }}
         run: |
           set -euo pipefail
-          node macos/AlignStudio/tests/launcher-tests.cjs
-          node macos/AlignStudio/tests/panel-regressions.cjs
           node --check macos/AlignStudio/panel/platform.js
           node --check macos/AlignStudio/panel/update.js
           node --check macos/AlignStudio/panel/panel.js
           bash -n macos/AlignStudio/scripts/package.sh
           bash -n "macos/AlignStudio/scripts/Install Align Studio.command"
-      - name: Compile and test native updater
+      - name: Build native updater
+        if: ${{ !cancelled() && steps.verify_environment.outcome == 'success' }}
         working-directory: macos/UpdateKit
-        run: |
-          set -euo pipefail
-          swift build --configuration release --product StudioUpdater
-          swift test
+        run: swift build --configuration release --product StudioUpdater
+      - name: Test native updater
+        if: ${{ !cancelled() && steps.verify_environment.outcome == 'success' }}
+        working-directory: macos/UpdateKit
+        run: swift test
       - name: Assemble development artifact
         run: bash macos/AlignStudio/scripts/development-artifact.sh artifacts
       - name: Upload development artifact (not a signed release)
