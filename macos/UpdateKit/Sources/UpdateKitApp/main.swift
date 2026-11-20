@@ -53,6 +53,10 @@ import UpdateKitCore
     } }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender:NSApplication)->Bool { operation?.cancel(); return true }
 }
-let app=NSApplication.shared
-app.setActivationPolicy(.accessory)
-let delegate=UpdaterDelegate(); app.delegate=delegate; app.run()
+MainActor.assumeIsolated {
+    let app=NSApplication.shared
+    app.setActivationPolicy(.accessory)
+    let delegate=UpdaterDelegate()
+    app.delegate=delegate
+    withExtendedLifetime(delegate) { app.run() }
+}
