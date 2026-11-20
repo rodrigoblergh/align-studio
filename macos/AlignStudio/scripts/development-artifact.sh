@@ -34,7 +34,7 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 </dict></plist>
 PLIST
 plutil -lint "$APP/Contents/Info.plist"
-lipo -verify_arch "$ARCH" "$APP/Contents/MacOS/AlignStudioUpdater"
+lipo "$APP/Contents/MacOS/AlignStudioUpdater" -verify_arch "$ARCH"
 # Ad-hoc identity is sufficient for build validation, never a distribution claim.
 codesign --force --sign - "$APP"
 codesign --verify --strict --deep "$APP"
