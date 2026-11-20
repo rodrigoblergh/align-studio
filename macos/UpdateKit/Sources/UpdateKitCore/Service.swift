@@ -22,7 +22,7 @@ public final class UpdateService: @unchecked Sendable {
             prefs.lastStatus=newer ? "Version \(manifest.version) is available." : "You are up to date."
             return newer
         }
-        if startup && available && (try store.load()).autoDownload { return try await download() }
+        if startup, available, try store.load().autoDownload { return try await download() }
         return try store.load().lastStatus
     }
     public func download() async throws -> String {
