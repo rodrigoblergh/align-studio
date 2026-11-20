@@ -1,5 +1,4 @@
 import XCTest
-import Darwin
 import Security
 @testable import UpdateKitCore
 final class CoreTests: XCTestCase {
@@ -18,17 +17,17 @@ final class CoreTests: XCTestCase {
         XCTAssertNotNil(Verification.date("2026-11-12T17:15:13Z"))
         XCTAssertNil(Verification.date("yesterday"))
     }
-    // Use a physical temporary root so only intentionally created links affect the tests.
+    // Keep fixtures out of the system temporary directory's alias paths.
     private func transactionFixtureBase() throws -> URL {
-        let path=try XCTUnwrap(realpath(FileManager.default.temporaryDirectory.path,nil))
-        defer { free(path) }
-        let root=URL(fileURLWithPath:String(cString:path),isDirectory:true)
-        try Installation.noLinks(root)
-        return root.appendingPathComponent(UUID().uuidString,isDirectory:true)
+        let base=FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".align-updater-test-"+UUID().uuidString,isDirectory:true)
+        try FileManager.default.createDirectory(at:base,withIntermediateDirectories:false)
+        addTeardownBlock { try FileManager.default.removeItem(at:base) }
+        try Installation.noLinks(base)
+        return base
     }
     func testTransactionRollbackAndTamper() throws {
         let base=try transactionFixtureBase()
-        defer { try? FileManager.default.removeItem(at:base) }
         let target=base.appendingPathComponent("target"), stage=base.appendingPathComponent("stage"), state=base.appendingPathComponent("state")
         for dir in [target,stage,state] { try FileManager.default.createDirectory(at:dir,withIntermediateDirectories:true) }
         try Data("old".utf8).write(to:target.appendingPathComponent("file"))
@@ -44,8 +43,6 @@ final class CoreTests: XCTestCase {
     }
     func testDanglingLinkRejected() throws {
         let base=try transactionFixtureBase()
-        try FileManager.default.createDirectory(at:base,withIntermediateDirectories:true)
-        defer { try? FileManager.default.removeItem(at:base) }
         let link=base.appendingPathComponent("link")
         try FileManager.default.createSymbolicLink(atPath:link.path,withDestinationPath:base.appendingPathComponent("missing").path)
         XCTAssertThrowsError(try Installation.noLinks(link))
@@ -54,7 +51,6 @@ final class CoreTests: XCTestCase {
         let base=try transactionFixtureBase()
         let state=base.appendingPathComponent("state"), target=base.appendingPathComponent("target"), backup=base.appendingPathComponent(".align-backup-"+UUID().uuidString)
         for dir in [state,backup] { try FileManager.default.createDirectory(at:dir,withIntermediateDirectories:true) }
-        defer { try? FileManager.default.removeItem(at:base) }
         try Data("original".utf8).write(to:backup.appendingPathComponent("file"))
         let record:[String:Any]=["backup":backup.lastPathComponent,"old":try Transaction.inventory(backup),"new":["file":"different"]]
         try JSONSerialization.data(withJSONObject:record).write(to:state.appendingPathComponent("transaction.json"))
